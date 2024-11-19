@@ -1,12 +1,11 @@
 const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
-const stream = require('stream');
-const { pipeline } = require('stream/promises');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Middleware to parse JSON and URL-encoded bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -22,7 +21,7 @@ app.get('/', (req, res) => {
           <label for="fileName">File Name:</label>
           <input type="text" name="fileName" required/><br><br>
           <label for="apiKey">API Key:</label>
-          <input type="text" name="apiKey" value="72f32e0e-6c19-4edd-a944-30da5f4eee6b"/><br><br>
+          <input type="text" name="apiKey" value="72f32e0e-6c19-4edd-a944-30da5f4eee6b" required/><br><br>
           <button type="submit">Upload</button>
         </form>
       </body>
@@ -53,19 +52,19 @@ async function uploadToPixelDrain(apiKey, remoteUrl, fileName) {
   const form = new FormData();
 
   // Fetch the file from the URL as a stream
-  const fileStream = await axios.get(remoteUrl, { responseType: 'stream' });
-
-  // Append the file to form data (streaming)
-  form.append('file', fileStream.data, fileName);
-
-  // Set up headers with authorization
-  const headers = {
-    ...form.getHeaders(),
-    Authorization: `Basic ${Buffer.from(':' + apiKey).toString('base64')}`,
-  };
-
-  // Make the POST request to PixelDrain with streaming
   try {
+    const fileStream = await axios.get(remoteUrl, { responseType: 'stream' });
+
+    // Append the file to form data (streaming)
+    form.append('file', fileStream.data, fileName);
+
+    // Set up headers with authorization
+    const headers = {
+      ...form.getHeaders(),
+      Authorization: `Basic ${Buffer.from(':' + apiKey).toString('base64')}`,
+    };
+
+    // Make the POST request to PixelDrain with streaming
     const uploadResponse = await axios.post(url, form, { headers });
     return uploadResponse.data;
   } catch (error) {
