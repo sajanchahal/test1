@@ -1,7 +1,8 @@
 const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
-const fs = require('fs');
+const stream = require('stream');
+const { pipeline } = require('stream/promises');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -46,16 +47,16 @@ app.post('/', async (req, res) => {
   }
 });
 
-// Function to upload file from URL to PixelDrain
+// Function to upload file from URL to PixelDrain using streaming
 async function uploadToPixelDrain(apiKey, remoteUrl, fileName) {
   const url = 'https://pixeldrain.com/api/file';
   const form = new FormData();
 
-  // Fetch the file from the URL
-  const fileResponse = await axios.get(remoteUrl, { responseType: 'stream' });
+  // Fetch the file from the URL as a stream
+  const fileStream = await axios.get(remoteUrl, { responseType: 'stream' });
 
-  // Append the file to form data
-  form.append('file', fileResponse.data, fileName);
+  // Append the file to form data (streaming)
+  form.append('file', fileStream.data, fileName);
 
   // Set up headers with authorization
   const headers = {
@@ -63,10 +64,13 @@ async function uploadToPixelDrain(apiKey, remoteUrl, fileName) {
     Authorization: `Basic ${Buffer.from(':' + apiKey).toString('base64')}`,
   };
 
-  // Make the POST request to PixelDrain
-  const uploadResponse = await axios.post(url, form, { headers });
-
-  return uploadResponse.data;
+  // Make the POST request to PixelDrain with streaming
+  try {
+    const uploadResponse = await axios.post(url, form, { headers });
+    return uploadResponse.data;
+  } catch (error) {
+    throw new Error('Failed to upload file: ' + error.message);
+  }
 }
 
 app.listen(port, () => {
