@@ -47,10 +47,13 @@ app.post('/', async (req, res) => {
     const form = new FormData();
     form.append('file', fileStream.data);
 
+    // Prepare HTTP Basic Authentication credentials
+    const authHeader = `Basic ${Buffer.from(`:${apiKey}`).toString('base64')}`;
+
     // Set headers, including the Authorization header
     const headers = {
       ...form.getHeaders(),
-      Authorization: `Bearer ${apiKey}`, // Add Bearer token
+      Authorization: authHeader, // Use HTTP Basic Authentication
     };
 
     // Send the request to PixelDrain
