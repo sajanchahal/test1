@@ -1,16 +1,13 @@
 const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
-const path = require('path');
 
 const app = express();
-const port = 3000;
 
-// Middleware to parse form data
+// Middleware to parse URL-encoded form data
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
 
-// Serve the HTML form at the root
+// Serve the HTML form
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -34,7 +31,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Handle file upload from URL
+// Handle the POST request to upload file
 app.post('/', async (req, res) => {
   const { url, apiKey } = req.body;
 
@@ -43,40 +40,39 @@ app.post('/', async (req, res) => {
   }
 
   try {
-    // Fetch the file content from the URL as a stream
+    // Fetch the file content from the provided URL
     const fileStream = await axios.get(url, { responseType: 'stream' });
 
-    // Create FormData and append the stream to it under the 'file' field
+    // Create a FormData object and append the file stream
     const form = new FormData();
     form.append('file', fileStream.data);
 
-    // Prepare headers for the PixelDrain upload
+    // Set headers, including the Authorization header
     const headers = {
-      ...form.getHeaders(),  // Add FormData headers
-      Authorization: `Bearer ${apiKey}`,
+      ...form.getHeaders(),
+      Authorization: `Bearer ${apiKey}`, // Add Bearer token
     };
 
-    // Send the FormData with the file stream as the 'file' field
-    const uploadResponse = await axios.post(
-      'https://pixeldrain.com/api/file',  // PixelDrain API endpoint
-      form,                               // The form with the file stream
-      { headers }
-    );
+    // Send the request to PixelDrain
+    const response = await axios.post('https://pixeldrain.com/api/file', form, {
+      headers,
+    });
 
-    // Handle the successful upload response
+    // Handle success
+    const responseData = response.data;
     res.send(`
-      <h1>Upload successful!</h1>
-      <p>File uploaded successfully to PixelDrain. Here is the response:</p>
-      <pre>${JSON.stringify(uploadResponse.data, null, 2)}</pre>
+      <h1>Upload Successful!</h1>
+      <p>Here is the response:</p>
+      <pre>${JSON.stringify(responseData, null, 2)}</pre>
       <a href="/">Upload another file</a>
     `);
   } catch (error) {
-    console.error('Error during upload:', error.response?.data || error.message);
+    // Handle errors
+    console.error('Error:', error.response?.data || error.message);
     res.status(500).send('Upload failed: ' + (error.response?.data?.error || error.message));
   }
 });
 
 // Start the server
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
