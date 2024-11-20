@@ -3,11 +3,8 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 const app = express();
-
-// Middleware to parse URL-encoded form data
 app.use(express.urlencoded({ extended: true }));
 
-// Serve the HTML form
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -31,7 +28,6 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Handle the POST request to upload file
 app.post('/', async (req, res) => {
   const { url, apiKey } = req.body;
 
@@ -40,42 +36,33 @@ app.post('/', async (req, res) => {
   }
 
   try {
-    // Fetch the file content from the provided URL
-    const fileStream = await axios.get(url, { responseType: 'stream' });
-
-    // Create a FormData object and append the file stream
+    // Initialize FormData
     const form = new FormData();
+
+    // Append file as a stream from the provided URL
+    const fileStream = await axios.get(url, { responseType: 'stream' });
     form.append('file', fileStream.data);
 
-    // Prepare HTTP Basic Authentication credentials
-    const authHeader = `Basic ${Buffer.from(`:${apiKey}`).toString('base64')}`;
-
-    // Set headers, including the Authorization header
+    // Set headers for HTTP Basic Authentication
     const headers = {
       ...form.getHeaders(),
-      Authorization: authHeader, // Use HTTP Basic Authentication
+      Authorization: `Basic ${Buffer.from(`:${apiKey}`).toString('base64')}`,
     };
 
-    // Send the request to PixelDrain
-    const response = await axios.post('https://pixeldrain.com/api/file', form, {
-      headers,
-    });
+    // Stream directly to PixelDrain
+    const response = await axios.post('https://pixeldrain.com/api/file', form, { headers });
 
-    // Handle success
-    const responseData = response.data;
     res.send(`
       <h1>Upload Successful!</h1>
-      <p>Here is the response:</p>
-      <pre>${JSON.stringify(responseData, null, 2)}</pre>
+      <p>Response:</p>
+      <pre>${JSON.stringify(response.data, null, 2)}</pre>
       <a href="/">Upload another file</a>
     `);
   } catch (error) {
-    // Handle errors
-    console.error('Error:', error.response?.data || error.message);
+    console.error('Upload failed:', error.response?.data || error.message);
     res.status(500).send('Upload failed: ' + (error.response?.data?.error || error.message));
   }
 });
 
-// Start the server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
