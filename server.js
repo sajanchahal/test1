@@ -42,4 +42,4 @@ async function uploadGoogleDriveToPixelDrain(driveFileId) {
 }
 
 // Example usage: Replace with your Google Drive file ID
-uploadGoogleDriveToPixelDrain('YOUR_GOOGLE_DRIVE_FILE_ID');
+uploadGoogleDriveToPixelDrain('1q4E2Z14dwOhUsKdrfvEP5chZ0TNOP15l');
