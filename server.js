@@ -1,9 +1,10 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const Buffer = require('buffer').Buffer;
 
 const app = express();
-const pixelDrainApiKey = '72f32e0e-6c19-4edd-a944-30da5f4eee6b'; // Replace with your API key
+const pixelDrainApiKey = '72f32e0e-6c19-4edd-a944-30da5f4eee6b'; // Replace with your PixelDrain API key
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -43,13 +44,16 @@ app.post('/upload', async (req, res) => {
             responseType: 'stream',
         });
 
-        // Step 2: Upload the streamed file to PixelDrain
+        // Step 2: Create Basic Authentication header
+        const authHeader = 'Basic ' + Buffer.from(':' + pixelDrainApiKey).toString('base64');
+
+        // Step 3: Upload the streamed file to PixelDrain with Basic Authentication
         console.log('Uploading file to PixelDrain...');
         const uploadResponse = await axios({
             method: 'POST',
             url: 'https://pixeldrain.com/api/file',
             headers: {
-                Authorization: `Bearer ${pixelDrainApiKey}`,
+                'Authorization': authHeader,
                 'Content-Type': 'application/octet-stream',
             },
             data: fileStream.data,
