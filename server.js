@@ -72,7 +72,7 @@ app.post('/upload', async (req, res) => {
         // Return the JSON response containing the direct download link
         res.json({
             message: 'File successfully uploaded to PixelDrain',
-            download_link: uploadResponse.data.link, // PixelDrain URL
+            download_link: uploadResponse.data, // PixelDrain URL
         });
 
     } catch (error) {
