@@ -1,7 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
-const ftp = require("ftp");
+const FTPClient = require("ftp");
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -29,27 +29,31 @@ app.post("/upload", async (req, res) => {
     const fileUrl = req.body.url;
 
     try {
-        // Fetch the file from the URL
-        const response = await axios({
-            url: fileUrl,
-            method: "GET",
-            responseType: "arraybuffer",
-        });
-
         const fileName = fileUrl.split("/").pop(); // Extract file name from URL
-        const fileData = response.data;
 
-        // Connect to FTP and upload file
-        const client = new ftp();
-        client.on("ready", () => {
-            client.put(fileData, fileName, (err) => {
-                if (err) {
-                    res.status(500).send("Failed to upload file to FTP.");
-                } else {
-                    res.send("File successfully uploaded to FTP!");
-                }
+        // Set up FTP client
+        const client = new FTPClient();
+        client.on("ready", async () => {
+            try {
+                // Stream the file directly from the URL to the FTP server
+                const response = await axios({
+                    url: fileUrl,
+                    method: "GET",
+                    responseType: "stream",
+                });
+
+                client.put(response.data, fileName, (err) => {
+                    if (err) {
+                        res.status(500).send("Failed to upload file to FTP.");
+                    } else {
+                        res.send("File successfully uploaded to FTP!");
+                    }
+                    client.end();
+                });
+            } catch (downloadErr) {
+                res.status(500).send("Error fetching file: " + downloadErr.message);
                 client.end();
-            });
+            }
         });
 
         client.on("error", (err) => {
@@ -58,7 +62,7 @@ app.post("/upload", async (req, res) => {
 
         client.connect(ftpConfig);
     } catch (err) {
-        res.status(500).send("Error fetching file: " + err.message);
+        res.status(500).send("Error: " + err.message);
     }
 });
 
