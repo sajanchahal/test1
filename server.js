@@ -2,6 +2,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
 const FTPClient = require("ftp");
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -13,20 +14,26 @@ const ftpConfig = {
     password: "jg7hx8qi6t",
 };
 
+// Store upload status by upload ID
+let uploadsStatus = {};
+
 // Serve the HTML page
 app.use(express.static("public")); // Serve static files from the "public" directory
 
-// Upload status variable
-let statusMessage = "Waiting for upload...";
-
 // Provide live status updates via SSE
-app.get("/status", (req, res) => {
+app.get("/status/:uploadId", (req, res) => {
+    const uploadId = req.params.uploadId;
+    
+    if (!uploadsStatus[uploadId]) {
+        return res.status(404).send("Upload ID not found.");
+    }
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
     const sendStatus = () => {
-        res.write(`data: ${statusMessage}\n\n`);
+        res.write(`data: ${uploadsStatus[uploadId]}\n\n`);
     };
 
     sendStatus();
@@ -54,14 +61,16 @@ function formatBytes(bytes) {
 app.post("/upload", async (req, res) => {
     const { url, path, filename } = req.body;
     const destination = `${path}/${filename}`; // Combine path and filename
-
+    const uploadId = uuidv4();  // Generate unique upload ID
+    uploadsStatus[uploadId] = "Waiting for upload...";  // Initialize status
+    
     try {
         // Get file size
         const headResponse = await axios.head(url);
         const totalSize = parseInt(headResponse.headers["content-length"], 10);
 
         if (isNaN(totalSize)) {
-            statusMessage = "Error: Unable to determine file size.";
+            uploadsStatus[uploadId] = "Error: Unable to determine file size.";
             return res.status(400).send("Unable to determine file size. Make sure the URL is valid.");
         }
 
@@ -84,38 +93,38 @@ app.post("/upload", async (req, res) => {
                     const percent = ((uploadedSize / totalSize) * 100).toFixed(2);
                     const uploadedFormatted = formatBytes(uploadedSize);
                     const totalFormatted = formatBytes(totalSize);
-                    statusMessage = `Uploading... ${percent}% (${uploadedFormatted}/${totalFormatted})`;
+                    uploadsStatus[uploadId] = `Uploading... ${percent}% (${uploadedFormatted}/${totalFormatted})`;
                 });
 
                 response.data.on("end", () => {
-                    statusMessage = "Upload complete!";
+                    uploadsStatus[uploadId] = "Upload complete!";
                 });
 
                 client.put(response.data, destination, (err) => {
                     if (err) {
-                        statusMessage = "Failed to upload file to FTP.";
+                        uploadsStatus[uploadId] = "Failed to upload file to FTP.";
                         res.status(500).send("Failed to upload file to FTP.");
                     } else {
-                        statusMessage = "File successfully uploaded to FTP!";
-                        res.send("File successfully uploaded to FTP!");
+                        uploadsStatus[uploadId] = "File successfully uploaded to FTP!";
+                        res.send({ uploadId, message: "File successfully uploaded to FTP!" });
                     }
                     client.end();
                 });
             } catch (downloadErr) {
-                statusMessage = "Error fetching file: " + downloadErr.message;
+                uploadsStatus[uploadId] = "Error fetching file: " + downloadErr.message;
                 res.status(500).send("Error fetching file: " + downloadErr.message);
                 client.end();
             }
         });
 
         client.on("error", (err) => {
-            statusMessage = "FTP connection error: " + err.message;
+            uploadsStatus[uploadId] = "FTP connection error: " + err.message;
             res.status(500).send("FTP connection error: " + err.message);
         });
 
         client.connect(ftpConfig);
     } catch (err) {
-        statusMessage = "Error: " + err.message;
+        uploadsStatus[uploadId] = "Error: " + err.message;
         res.status(500).send("Error: " + err.message);
     }
 });
