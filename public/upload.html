@@ -38,12 +38,6 @@
     <div id="status">Waiting for upload...</div>
 
     <script>
-        // Send the upload status to the #status div via SSE
-        const eventSource = new EventSource('/status');
-        eventSource.onmessage = function(event) {
-            document.getElementById('status').innerText = event.data;
-        };
-
         // Handle form submission
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -54,14 +48,27 @@
                 method: 'POST',
                 body: new URLSearchParams(formData)
             })
-            .then(response => response.text())
+            .then(response => response.json())
             .then(data => {
-                alert(data);
+                const uploadId = data.uploadId;
+                startMonitoring(uploadId);
             })
             .catch(error => {
                 alert('Error uploading file: ' + error);
             });
         });
+
+        // Function to start monitoring upload progress
+        function startMonitoring(uploadId) {
+            const eventSource = new EventSource(`/status/${uploadId}`);
+            eventSource.onmessage = function(event) {
+                document.getElementById('status').innerText = event.data;
+            };
+
+            eventSource.onerror = function() {
+                alert("Error monitoring the upload status.");
+            };
+        }
     </script>
 
 </body>
