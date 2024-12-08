@@ -19,6 +19,13 @@ app.get("/", (req, res) => {
         <form method="POST" action="/upload">
             <label for="url">File URL:</label>
             <input type="text" id="url" name="url" required>
+            <br>
+            <label for="path">FTP Path (e.g., /):</label>
+            <input type="text" id="path" name="path" value="/" required>
+            <br>
+            <label for="filename">File Name:</label>
+            <input type="text" id="filename" name="filename" required>
+            <br>
             <button type="submit">Upload</button>
         </form>
     `);
@@ -26,27 +33,43 @@ app.get("/", (req, res) => {
 
 // Handle file upload
 app.post("/upload", async (req, res) => {
-    const fileUrl = req.body.url;
+    const { url, path, filename } = req.body;
+    const destination = `${path}/${filename}`; // Combine path and filename
 
     try {
-        const fileName = fileUrl.split("/").pop(); // Extract file name from URL
+        // Get file size
+        const headResponse = await axios.head(url);
+        const totalSize = parseInt(headResponse.headers["content-length"], 10);
+
+        if (isNaN(totalSize)) {
+            return res.status(400).send("Unable to determine file size. Make sure the URL is valid.");
+        }
+
+        let uploadedSize = 0; // Track uploaded bytes
 
         // Set up FTP client
         const client = new FTPClient();
+
         client.on("ready", async () => {
             try {
-                // Stream the file directly from the URL to the FTP server
+                // Stream the file from the URL
                 const response = await axios({
-                    url: fileUrl,
+                    url,
                     method: "GET",
                     responseType: "stream",
                 });
 
-                client.put(response.data, fileName, (err) => {
+                response.data.on("data", (chunk) => {
+                    uploadedSize += chunk.length; // Update uploaded size
+                    const percent = ((uploadedSize / totalSize) * 100).toFixed(2);
+                    process.stdout.write(`\rUploading... ${percent}% (${uploadedSize}/${totalSize} bytes)`);
+                });
+
+                client.put(response.data, destination, (err) => {
                     if (err) {
                         res.status(500).send("Failed to upload file to FTP.");
                     } else {
-                        res.send("File successfully uploaded to FTP!");
+                        res.send(`File successfully uploaded to FTP! (${filename})`);
                     }
                     client.end();
                 });
