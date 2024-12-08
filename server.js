@@ -2,10 +2,12 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
 const FTPClient = require("ftp");
-const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Store progress for each upload ID
+const uploadStatuses = {};
 
 // FTP credentials
 const ftpConfig = {
@@ -14,32 +16,31 @@ const ftpConfig = {
     password: "jg7hx8qi6t",
 };
 
-// Store upload status by upload ID
-let uploadsStatus = {};
-
 // Serve the HTML page
 app.use(express.static("public")); // Serve static files from the "public" directory
+
+// Upload status variable
+let statusMessage = "Waiting for upload...";
 
 // Provide live status updates via SSE
 app.get("/status/:uploadId", (req, res) => {
     const uploadId = req.params.uploadId;
-    
-    if (!uploadsStatus[uploadId]) {
-        return res.status(404).send("Upload ID not found.");
-    }
+
+    // Check if there's a status message for the given uploadId
+    const uploadStatus = uploadStatuses[uploadId] || "No status available for this upload ID.";
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
-    const sendStatus = () => {
-        res.write(`data: ${uploadsStatus[uploadId]}\n\n`);
-    };
-
-    sendStatus();
+    // Send status message for this uploadId
+    res.write(`data: ${uploadStatus}\n\n`);
 
     // Interval to keep the connection alive
-    const interval = setInterval(sendStatus, 1000);
+    const interval = setInterval(() => {
+        const status = uploadStatuses[uploadId] || "No status available for this upload ID.";
+        res.write(`data: ${status}\n\n`);
+    }, 1000);
 
     req.on("close", () => {
         clearInterval(interval);
@@ -59,18 +60,19 @@ function formatBytes(bytes) {
 
 // Handle file upload
 app.post("/upload", async (req, res) => {
-    const { url, path, filename } = req.body;
+    const { url, path, filename, uploadId } = req.body;
     const destination = `${path}/${filename}`; // Combine path and filename
-    const uploadId = uuidv4();  // Generate unique upload ID
-    uploadsStatus[uploadId] = "Waiting for upload...";  // Initialize status
-    
+
+    // Store initial upload status
+    uploadStatuses[uploadId] = "Starting upload...";
+
     try {
         // Get file size
         const headResponse = await axios.head(url);
         const totalSize = parseInt(headResponse.headers["content-length"], 10);
 
         if (isNaN(totalSize)) {
-            uploadsStatus[uploadId] = "Error: Unable to determine file size.";
+            uploadStatuses[uploadId] = "Error: Unable to determine file size.";
             return res.status(400).send("Unable to determine file size. Make sure the URL is valid.");
         }
 
@@ -93,38 +95,38 @@ app.post("/upload", async (req, res) => {
                     const percent = ((uploadedSize / totalSize) * 100).toFixed(2);
                     const uploadedFormatted = formatBytes(uploadedSize);
                     const totalFormatted = formatBytes(totalSize);
-                    uploadsStatus[uploadId] = `Uploading... ${percent}% (${uploadedFormatted}/${totalFormatted})`;
+                    uploadStatuses[uploadId] = `Uploading... ${percent}% (${uploadedFormatted}/${totalFormatted})`;
                 });
 
                 response.data.on("end", () => {
-                    uploadsStatus[uploadId] = "Upload complete!";
+                    uploadStatuses[uploadId] = "Upload complete!";
                 });
 
                 client.put(response.data, destination, (err) => {
                     if (err) {
-                        uploadsStatus[uploadId] = "Failed to upload file to FTP.";
+                        uploadStatuses[uploadId] = "Failed to upload file to FTP.";
                         res.status(500).send("Failed to upload file to FTP.");
                     } else {
-                        uploadsStatus[uploadId] = "File successfully uploaded to FTP!";
-                        res.send({ uploadId, message: "File successfully uploaded to FTP!" });
+                        uploadStatuses[uploadId] = "File successfully uploaded to FTP!";
+                        res.send("File successfully uploaded to FTP!");
                     }
                     client.end();
                 });
             } catch (downloadErr) {
-                uploadsStatus[uploadId] = "Error fetching file: " + downloadErr.message;
+                uploadStatuses[uploadId] = "Error fetching file: " + downloadErr.message;
                 res.status(500).send("Error fetching file: " + downloadErr.message);
                 client.end();
             }
         });
 
         client.on("error", (err) => {
-            uploadsStatus[uploadId] = "FTP connection error: " + err.message;
+            uploadStatuses[uploadId] = "FTP connection error: " + err.message;
             res.status(500).send("FTP connection error: " + err.message);
         });
 
         client.connect(ftpConfig);
     } catch (err) {
-        uploadsStatus[uploadId] = "Error: " + err.message;
+        uploadStatuses[uploadId] = "Error: " + err.message;
         res.status(500).send("Error: " + err.message);
     }
 });
