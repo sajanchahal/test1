@@ -13,35 +13,13 @@ const ftpConfig = {
     password: "jg7hx8qi6t",
 };
 
-// Serve HTML form
-app.get("/", (req, res) => {
-    res.send(`
-        <form method="POST" action="/upload">
-            <label for="url">File URL:</label>
-            <input type="text" id="url" name="url" required>
-            <br>
-            <label for="path">FTP Path (e.g., /):</label>
-            <input type="text" id="path" name="path" value="/" required>
-            <br>
-            <label for="filename">File Name:</label>
-            <input type="text" id="filename" name="filename" required>
-            <br>
-            <button type="submit">Upload</button>
-        </form>
-        <hr>
-        <div id="status">Waiting for upload...</div>
-        <script>
-            const eventSource = new EventSource('/status');
-            eventSource.onmessage = (event) => {
-                document.getElementById('status').innerText = event.data;
-            };
-        </script>
-    `);
-});
+// Serve the HTML page
+app.use(express.static("public")); // Serve static files from the "public" directory
 
-// Live status updates
+// Upload status variable
 let statusMessage = "Waiting for upload...";
 
+// Provide live status updates via SSE
 app.get("/status", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -53,7 +31,7 @@ app.get("/status", (req, res) => {
 
     sendStatus();
 
-    // Interval to keep connection alive
+    // Interval to keep the connection alive
     const interval = setInterval(sendStatus, 1000);
 
     req.on("close", () => {
