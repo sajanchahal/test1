@@ -39,6 +39,17 @@ app.get("/status", (req, res) => {
     });
 });
 
+// Convert bytes to KB, MB, or GB
+function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(2)} KB`;
+    const mb = kb / 1024;
+    if (mb < 1024) return `${mb.toFixed(2)} MB`;
+    const gb = mb / 1024;
+    return `${gb.toFixed(2)} GB`;
+}
+
 // Handle file upload
 app.post("/upload", async (req, res) => {
     const { url, path, filename } = req.body;
@@ -71,7 +82,9 @@ app.post("/upload", async (req, res) => {
                 response.data.on("data", (chunk) => {
                     uploadedSize += chunk.length; // Update uploaded size
                     const percent = ((uploadedSize / totalSize) * 100).toFixed(2);
-                    statusMessage = `Uploading... ${percent}% (${uploadedSize}/${totalSize} bytes)`;
+                    const uploadedFormatted = formatBytes(uploadedSize);
+                    const totalFormatted = formatBytes(totalSize);
+                    statusMessage = `Uploading... ${percent}% (${uploadedFormatted}/${totalFormatted})`;
                 });
 
                 response.data.on("end", () => {
