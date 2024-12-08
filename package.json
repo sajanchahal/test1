@@ -1,19 +1,17 @@
 {
-  "name": "pixel-drain-upload",
+  "name": "ftp-upload-app",
   "version": "1.0.0",
-  "description": "A simple Node.js app to upload files to PixelDrain directly from a URL",
+  "description": "A Node.js app to upload files from a URL to an FTP server.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.4.0",
-    "form-data": "^4.0.0"
+    "axios": "^1.6.1",
+    "body-parser": "^1.20.2",
+    "express": "^4.18.3",
+    "ftp": "^0.3.10"
   },
-  "engines": {
-    "node": ">=14.0.0"
-  },
-  "author": "",
+  "author": "Your Name",
   "license": "ISC"
 }
