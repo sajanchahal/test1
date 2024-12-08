@@ -13,99 +13,43 @@ const ftpConfig = {
     password: "jg7hx8qi6t",
 };
 
-// Serve HTML and JavaScript
+// Serve HTML form
 app.get("/", (req, res) => {
     res.send(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>FTP Upload with Progress</title>
-        </head>
-        <body>
-            <h1>Upload File to FTP</h1>
-            <form id="uploadForm" method="POST" action="/upload">
-                <label for="url">File URL:</label>
-                <input type="text" id="url" name="url" required>
-                <br>
-                <label for="path">FTP Path:</label>
-                <input type="text" id="path" name="path" value="/" required>
-                <br>
-                <label for="filename">File Name:</label>
-                <input type="text" id="filename" name="filename" required>
-                <br>
-                <button type="submit">Upload</button>
-            </form>
-
-            <h2 id="status">Status: Waiting...</h2>
-            <pre id="progress"></pre>
-
-            <script>
-                const form = document.getElementById("uploadForm");
-                const status = document.getElementById("status");
-                const progress = document.getElementById("progress");
-
-                form.addEventListener("submit", (e) => {
-                    e.preventDefault();
-                    status.textContent = "Status: Uploading...";
-                    progress.textContent = "";
-
-                    const formData = new FormData(form);
-                    const urlParams = new URLSearchParams(formData);
-
-                    const eventSource = new EventSource(\`/upload?${urlParams.toString()}\`);
-
-                    eventSource.onmessage = (event) => {
-                        progress.textContent += event.data + "\\n";
-                        if (event.data.includes("File successfully uploaded to FTP!")) {
-                            status.textContent = "Status: Completed!";
-                            eventSource.close();
-                        } else if (event.data.includes("Error")) {
-                            status.textContent = "Status: Error occurred!";
-                            eventSource.close();
-                        }
-                    };
-
-                    eventSource.onerror = () => {
-                        status.textContent = "Status: Connection lost!";
-                        eventSource.close();
-                    };
-                });
-            </script>
-        </body>
-        </html>
+        <form method="POST" action="/upload">
+            <label for="url">File URL:</label>
+            <input type="text" id="url" name="url" required>
+            <br>
+            <label for="path">FTP Path (e.g., /):</label>
+            <input type="text" id="path" name="path" value="/" required>
+            <br>
+            <label for="filename">File Name:</label>
+            <input type="text" id="filename" name="filename" required>
+            <br>
+            <button type="submit">Upload</button>
+        </form>
     `);
 });
 
-// Handle file upload and progress
-app.get("/upload", async (req, res) => {
-    const { url, path, filename } = req.query;
+// Handle file upload
+app.post("/upload", async (req, res) => {
+    const { url, path, filename } = req.body;
     const destination = `${path}/${filename}`; // Combine path and filename
-
-    let totalSize = 0;
-    let uploadedSize = 0;
-
-    // Start SSE connection
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.flushHeaders();
 
     try {
         // Get file size
         const headResponse = await axios.head(url);
-        totalSize = parseInt(headResponse.headers["content-length"], 10);
+        const totalSize = parseInt(headResponse.headers["content-length"], 10);
 
         if (isNaN(totalSize)) {
-            res.write(`data: Unable to determine file size.\n\n`);
-            res.end();
-            return;
+            return res.status(400).send("Unable to determine file size. Make sure the URL is valid.");
         }
 
-        res.write(`data: Starting upload for ${filename} (${totalSize} bytes).\n\n`);
+        let uploadedSize = 0; // Track uploaded bytes
 
         // Set up FTP client
         const client = new FTPClient();
+
         client.on("ready", async () => {
             try {
                 // Stream the file from the URL
@@ -118,34 +62,30 @@ app.get("/upload", async (req, res) => {
                 response.data.on("data", (chunk) => {
                     uploadedSize += chunk.length; // Update uploaded size
                     const percent = ((uploadedSize / totalSize) * 100).toFixed(2);
-                    res.write(`data: Progress: ${percent}% (${uploadedSize}/${totalSize} bytes)\n\n`);
+                    process.stdout.write(`\rUploading... ${percent}% (${uploadedSize}/${totalSize} bytes)`);
                 });
 
                 client.put(response.data, destination, (err) => {
                     if (err) {
-                        res.write(`data: Error: Failed to upload file to FTP.\n\n`);
+                        res.status(500).send("Failed to upload file to FTP.");
                     } else {
-                        res.write(`data: File successfully uploaded to FTP!\n\n`);
+                        res.send(`File successfully uploaded to FTP! (${filename})`);
                     }
-                    res.end();
                     client.end();
                 });
             } catch (downloadErr) {
-                res.write(`data: Error: ${downloadErr.message}\n\n`);
-                res.end();
+                res.status(500).send("Error fetching file: " + downloadErr.message);
                 client.end();
             }
         });
 
         client.on("error", (err) => {
-            res.write(`data: FTP connection error: ${err.message}\n\n`);
-            res.end();
+            res.status(500).send("FTP connection error: " + err.message);
         });
 
         client.connect(ftpConfig);
     } catch (err) {
-        res.write(`data: Error: ${err.message}\n\n`);
-        res.end();
+        res.status(500).send("Error: " + err.message);
     }
 });
 
